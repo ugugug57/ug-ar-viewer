@@ -11,12 +11,35 @@
 
     <style>
         body { font-family: sans-serif; background-color: #121212; margin: 0; overflow: hidden; }
-        .controls-card { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.95); padding: 12px 15px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: 90%; max-width: 450px; z-index: 9999; }
+        
+        /* 1. 將控制卡片稍微往下移，留出頂部空間給 AR 按鈕 */
+        .controls-card { 
+            position: absolute; 
+            top: 80px; /* 原本是 10px，改為 80px 往下移 */
+            left: 50%; 
+            transform: translateX(-50%); 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 12px 15px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
+            width: 90%; 
+            max-width: 450px; 
+            z-index: 9999; 
+        }
+        
         select, input[type="file"], button { width: 100%; padding: 10px; margin: 4px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
         .btn-upload { background-color: #34c759; color: white; border: none; font-weight: bold; cursor: pointer; }
         .status { font-size: 12px; color: #666; margin-top: 4px; text-align: center; }
-        /* A-Frame 內建的 AR 按鈕我們讓它明顯一點 */
-        .a-enter-vr { bottom: 20px !important; right: 20px !important; }
+        
+        /* 2. 【關鍵】強制將 A-Frame 內建的 AR 按鈕移到右上角，並稍微放大 */
+        .a-enter-vr { 
+            top: 20px !important; 
+            bottom: auto !important; 
+            right: 20px !important; 
+            z-index: 10000 !important;
+            transform: scale(1.3); /* 將按鈕放大 1.3 倍，更容易點擊 */
+            transform-origin: top right;
+        }
     </style>
 </head>
 <body>
@@ -35,9 +58,9 @@
 
         <div id="status" class="status">正在檢查系統連線...</div>
         
-        <!-- 給使用者的 AR 提示 -->
+        <!-- 給使用者的 AR 提示改為右上角 -->
         <div style="font-size: 11px; color: #d32f2f; margin-top: 10px; text-align: center;">
-            ⚠️ 載入模型後，請點擊畫面右下角的 <b>「AR / VR 按鈕」</b><br>
+            ⚠️ 載入模型後，請點擊畫面<b>「右上角」</b>的 AR 按鈕<br>
             (平面偵測功能目前僅支援 Android Chrome)
         </div>
     </div>
@@ -53,23 +76,19 @@
         <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
         <a-entity light="type: directional; intensity: 0.8;" position="-1 2 1"></a-entity>
 
-        <!-- 
-          平面準星 (Reticle)：當手機偵測到真實平面時，會顯示這個圓圈 
-        -->
+        <!-- 平面準星 (Reticle) -->
         <a-entity id="reticle" visible="false">
             <a-ring color="cyan" radius-inner="0.1" radius-outer="0.15" rotation="-90 0 0"></a-ring>
         </a-entity>
 
-        <!-- 
-          我們的 3D 模型。一開始隱藏，點擊螢幕後才會放在準星的位置 
-        -->
+        <!-- 我們的 3D 模型 -->
         <a-entity id="arModel" scale="1 1 1" visible="false"></a-entity>
 
         <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-        // ⚠️ 請貼上您的 GAS API 網址
+        // ⚠️ 請保留您的 GAS API 網址
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxbCkcJYozNf2uJWRs7kB1FzmlCpPttHPTSbJvOLqMvLqwRpJ2HSAq-bqHtERBbSw8QAw/exec";
 
         const fileSelect = document.getElementById('fileSelect');
@@ -113,35 +132,28 @@
             }
         }
 
-        // WebXR Hit Test 邏輯：當進入 AR 模式時
+        // WebXR Hit Test 邏輯
         sceneEl.addEventListener('enter-vr', function () {
             if (sceneEl.is('ar-mode')) {
-                // 隱藏 HTML 控制卡片，讓畫面乾淨
-                mainCard.style.display = 'none';
-                
-                // 啟動平面準星監聽
+                mainCard.style.display = 'none'; // 隱藏面板
                 sceneEl.addEventListener('ar-hit-test-start', function () {
                     reticle.setAttribute('visible', 'true');
                 });
-
                 sceneEl.addEventListener('ar-hit-test-achieved', function () {
                     reticle.setAttribute('visible', 'true');
                 });
-
                 sceneEl.addEventListener('ar-hit-test-lost', function () {
                     reticle.setAttribute('visible', 'false');
                 });
             }
         });
 
-        // 離開 AR 模式時，把卡片叫回來
         sceneEl.addEventListener('exit-vr', function () {
-            mainCard.style.display = 'block';
+            mainCard.style.display = 'block'; // 離開AR後顯示面板
             reticle.setAttribute('visible', 'false');
             arModel.setAttribute('visible', 'false');
         });
 
-        // 當使用者在 AR 畫面點擊螢幕時，把模型放在準星的位置
         sceneEl.addEventListener('click', function () {
             if (sceneEl.is('ar-mode') && reticle.getAttribute('visible') === true && modelLoaded) {
                 arModel.setAttribute('position', reticle.getAttribute('position'));
@@ -192,7 +204,7 @@
             arModel.setAttribute('gltf-model', currentBlobUrl);
             modelLoaded = true;
             
-            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入完成！<br>請點擊右下角「AR」按鈕進入平面偵測模式。</span>';
+            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入完成！<br>請點擊右上角「AR」按鈕進入平面偵測。</span>';
         }
 
         fileSelect.addEventListener('change', async (e) => {
