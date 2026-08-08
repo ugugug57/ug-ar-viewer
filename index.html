@@ -5,12 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>WebAR 掃描圖卡檢視器</title>
 
-    <!-- 載入 A-Frame 1.3.0 (與 MindAR 相容性最佳) -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <!-- 載入相符版本的 Three.js 轉換器 -->
     <script src="https://unpkg.com/three@0.137.0/examples/js/loaders/STLLoader.js"></script>
     <script src="https://unpkg.com/three@0.137.0/examples/js/exporters/GLTFExporter.js"></script>
-    <!-- 載入 MindAR 核心 (包含圖片編譯器) 與 A-Frame 綁定 -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
@@ -31,7 +28,6 @@
         .btn-upload { background-color: #34c759; color: white; border: none; font-weight: bold; cursor: pointer; }
         .status { font-size: 13px; color: #d32f2f; margin-top: 8px; text-align: center; font-weight: bold; }
         
-        /* 預覽圖片的樣式 */
         .preview-container { text-align: center; margin-top: 5px; background: #eee; padding: 10px; border-radius: 8px; }
         #previewImg { max-width: 100%; max-height: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
         .preview-hint { font-size: 11px; color: #666; margin-top: 4px; }
@@ -51,7 +47,6 @@
     <div class="controls-card" id="mainCard">
         <div style="font-weight:bold; text-align:center; font-size:16px; margin-bottom:10px;">WebAR 掃描圖卡系統</div>
         
-        <!-- 第一區：3D 模型設定 -->
         <div class="section-title">1. 設定 3D 模型 (.glb, .stl)</div>
         <select id="fileSelect">
             <option value="">-- 載入雲端列表中... --</option>
@@ -62,11 +57,9 @@
 
         <hr style="border:0; border-top:1px solid #ddd; margin: 15px 0;">
 
-        <!-- 第二區：偵測圖卡設定 -->
         <div class="section-title">2. 設定要掃描的「偵測圖」</div>
         <input type="file" id="targetUpload" accept="image/png, image/jpeg">
         <div class="preview-container">
-            <!-- 預設提供一張測試用的圖卡 -->
             <img id="previewImg" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" crossorigin="anonymous">
             <div class="preview-hint">請用鏡頭掃描這張圖，模型將出現在圖面上</div>
         </div>
@@ -77,13 +70,10 @@
         <div id="status" class="status">請先設定模型與圖卡</div>
     </div>
 
-    <!-- AR 容器，啟動時會動態注入 -->
     <div id="ar-container" style="position: absolute; top:0; left:0; width:100%; height:100%; z-index:1;"></div>
 
     <script>
-        // ==========================================
-        // 已經為您替換為最新專屬的 GAS API 網址
-        // ==========================================
+        // ⚠️ 請保留您的 GAS API 網址
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxrcepwMRmGzdAA2X3PG8Mt7ctrhMgnXvKWmhPgP3zx-vQUUqk7_NxDmsIfm9LALZht/exec";
 
         const fileSelect = document.getElementById('fileSelect');
@@ -103,7 +93,6 @@
 
         window.onload = fetchFiles;
 
-        // --- 1. 取得與處理 3D 模型 ---
         async function fetchFiles() {
             try {
                 const res = await fetch(`${GAS_API_URL}?action=getFiles`);
@@ -198,7 +187,6 @@
             modelStatus.textContent = '✅ 模型準備就緒！';
         }
 
-        // --- 2. 處理使用者上傳「偵測圖」 ---
         targetUpload.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
@@ -208,7 +196,9 @@
             }
         });
 
-        // --- 3. 核心：在瀏覽器端將圖片編譯成 MindAR 偵測檔 ---
+        // ==========================================
+        // 核心修正：自動壓縮圖片，防止手機記憶體爆炸
+        // ==========================================
         async function compileImageToMind(imageUrl) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -216,11 +206,41 @@
                 
                 img.onload = async () => {
                     try {
-                        const compiler = new MINDAR.IMAGE.Compiler();
-                        await compiler.compileImageTargets([img]);
-                        const exportedData = compiler.exportData();
-                        const blob = new Blob([exportedData], { type: 'application/octet-stream' });
-                        resolve(URL.createObjectURL(blob));
+                        // 1. 設定最大尺寸 (800px 足以讓 AR 精準追蹤)
+                        const MAX_DIM = 800;
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > MAX_DIM) {
+                                height *= MAX_DIM / width;
+                                width = MAX_DIM;
+                            }
+                        } else {
+                            if (height > MAX_DIM) {
+                                width *= MAX_DIM / height;
+                                height = MAX_DIM;
+                            }
+                        }
+
+                        // 2. 使用 Canvas 繪製壓縮後的圖片
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // 3. 將壓縮後的圖片餵給編譯器
+                        const resizedImg = new Image();
+                        resizedImg.onload = async () => {
+                            const compiler = new MINDAR.IMAGE.Compiler();
+                            await compiler.compileImageTargets([resizedImg]);
+                            const exportedData = compiler.exportData();
+                            const blob = new Blob([exportedData], { type: 'application/octet-stream' });
+                            resolve(URL.createObjectURL(blob));
+                        };
+                        resizedImg.src = canvas.toDataURL('image/jpeg', 0.8);
+
                     } catch (err) {
                         reject(err);
                     }
@@ -230,7 +250,6 @@
             });
         }
 
-        // --- 4. 啟動 AR ---
         startCamBtn.addEventListener('click', async () => {
             if (!currentModelBlobUrl) {
                 alert('請先選擇或上傳一個 3D 模型！');
@@ -238,36 +257,33 @@
             }
 
             statusDiv.style.color = "#007aff";
-            statusDiv.textContent = '正在利用 AI 演算法編譯偵測圖，請稍候... (手機可能需要幾秒鐘)';
+            statusDiv.textContent = '正在利用 AI 演算法編譯偵測圖，請稍候...';
             startCamBtn.disabled = true;
 
             try {
-                // 1. 編譯圖卡
+                // 編譯圖卡 (現在有自動壓縮，速度會快很多)
                 const mindUrl = await compileImageToMind(targetImageUrl);
                 
-                // 2. 隱藏控制面板，顯示退出按鈕
                 mainCard.style.display = 'none';
                 exitBtn.style.display = 'block';
 
-                // 3. 動態注入 A-Frame 場景
                 arContainer.innerHTML = `
                     <a-scene mindar-image="imageTargetSrc: ${mindUrl}; autoStart: true; uiScanning: no;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
                         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
                         <a-entity mindar-image-target="targetIndex: 0">
-                            <!-- 依需求可調整 scale，預設為 1 1 1 -->
-                            <a-gltf-model src="${currentModelBlobUrl}" position="0 0 0" scale="1 1 1" rotation="0 0 0"></a-gltf-model>
+                            <!-- 模型預設顯示在圖卡中心 -->
+                            <a-gltf-model src="${currentModelBlobUrl}" position="0 0 0.1" scale="1 1 1" rotation="0 0 0"></a-gltf-model>
                         </a-entity>
                     </a-scene>
                 `;
             } catch (err) {
                 statusDiv.style.color = "red";
-                statusDiv.textContent = '圖卡編譯失敗，請換一張對比度與特徵較明顯的圖片。';
+                statusDiv.textContent = '圖卡編譯失敗，請換一張圖片。';
                 startCamBtn.disabled = false;
                 console.error(err);
             }
         });
 
-        // 退出 AR，重整頁面
         exitBtn.addEventListener('click', () => {
             window.location.reload();
         });
