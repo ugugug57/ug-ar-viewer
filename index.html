@@ -133,13 +133,12 @@
         <a-assets id="assets-container"></a-assets>
         <a-entity light="type: ambient; intensity: 1.2;"></a-entity>
         <a-entity light="type: directional; intensity: 0.8;" position="-1 2 1"></a-entity>
-        <!-- 模型生成位置 -->
         <a-entity id="arModel" position="0 0 -2" scale="1 1 1" rotation="0 0 0"></a-entity>
         <a-entity cameraLook-controls></a-entity>
     </a-scene>
 
     <script>
-        // ⚠️【必須修改】請將下方網址替換為您 Google Apps Script 最新發布的 /exec 網址
+        // ⚠️【必須修改】請貼上您最新部署的 GAS /exec 網址
         const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE";
 
         const mainCard = document.getElementById('mainCard');
@@ -162,25 +161,20 @@
             fetchFiles();
         };
 
-        // 呼叫 GAS API：獲取檔案列表
+        // 改為 GET 請求以 100% 避開 CORS 阻擋
         async function fetchFiles() {
             try {
-                // 為了避免 CORS 預檢失敗，強制使用 text/plain 發送 JSON
-                const res = await fetch(GAS_API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: "getFiles" })
-                });
-                
+                const res = await fetch(`${GAS_API_URL}?action=getFiles`);
                 const data = await res.json();
                 if (data.success) {
                     populateDropdown(data.files);
+                    statusDiv.textContent = '選取模型後即可開啟相機！';
                 } else {
-                    statusDiv.textContent = '讀取列表失敗：' + (data.error || '未知錯誤');
+                    statusDiv.textContent = '讀取失敗：' + data.error;
                 }
             } catch (err) {
                 console.error(err);
-                statusDiv.textContent = '無法連線至雲端資料庫。請確認 GAS 網址與部署權限。';
+                statusDiv.textContent = '無法連線至雲端資料庫，請檢查網址或部署權限。';
             }
         }
 
@@ -238,14 +232,12 @@
             if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
             currentBlobUrl = URL.createObjectURL(blob);
 
-            // 重新掛載模型以更新 A-Frame 場景
             arModel.removeAttribute('gltf-model');
             arModel.setAttribute('gltf-model', currentBlobUrl);
             
-            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入成功！可開啟相機。</span>';
+            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入成功！點擊開啟相機。</span>';
         }
 
-        // 開啟實景相機
         startCamBtn.addEventListener('click', async () => {
             try {
                 statusDiv.textContent = '啟動相機中...';
@@ -265,17 +257,12 @@
             }
         });
 
-        // 選擇下拉選單模型
         fileSelect.addEventListener('change', async (e) => {
             const fileId = e.target.value;
             if (fileId) {
-                statusDiv.textContent = '從雲端下載模型中，請稍候...';
+                statusDiv.textContent = '從雲端下載模型中...';
                 try {
-                    const res = await fetch(GAS_API_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ action: "getFileData", fileId: fileId })
-                    });
+                    const res = await fetch(`${GAS_API_URL}?action=getFileData&fileId=${fileId}`);
                     const data = await res.json();
                     if (data.success) {
                         loadModelFromBase64(data.base64, data.name);
@@ -289,7 +276,6 @@
             }
         });
 
-        // 上傳新檔案
         uploadBtn.addEventListener('click', () => {
             const file = glbUpload.files[0];
             if (!file) {
@@ -297,7 +283,7 @@
                 return;
             }
 
-            statusDiv.textContent = '檔案上傳中，請稍候...';
+            statusDiv.textContent = '檔案上傳中...';
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = async function () {
@@ -316,7 +302,7 @@
                     const data = await res.json();
                     if (data.success) {
                         loadModelFromBase64(base64Data, file.name);
-                        fetchFiles(); // 更新下拉選單
+                        fetchFiles();
                     } else {
                         statusDiv.textContent = '上傳失敗：' + data.error;
                     }
