@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebAR 實境檢視器 (MyWebAR 架構)</title>
+
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: transparent;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .controls-card {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 450px;
+            box-sizing: border-box;
+            z-index: 9999;
+            transition: all 0.3s ease;
+        }
+
+        .controls-card.minimized {
+            padding: 6px 12px;
+            width: auto;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(5px);
+        }
+
+        .controls-card.minimized .card-content { display: none; }
+        .controls-card.minimized .minimized-toggle { display: flex !important; }
+
+        .minimized-toggle {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            color: #007aff;
+        }
+
+        select, input[type="file"], button {
+            width: 100%;
+            padding: 10px;
+            margin: 4px 0;
+            box-sizing: border-box;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        .btn-ar { background-color: #007aff; color: white; border: none; font-weight: bold; font-size: 15px; cursor: pointer; }
+        .btn-upload { background-color: #34c759; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .status { font-size: 12px; color: #666; margin-top: 4px; text-align: center; }
+        .section-title { font-weight: bold; color: #333; font-size: 13px; }
+
+        #ar-camera-feed {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: 0;
+            display: none;
+        }
+
+        a-scene {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <video id="ar-camera-feed" autoplay playsinline muted></video>
+
+    <div class="controls-card" id="mainCard">
+        <div class="minimized-toggle" id="expandBtn">
+            <span>⚙️ 展開選單 / 切換模型</span>
+        </div>
+
+        <div class="card-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-weight:bold;">WebAR 實境檢視器</div>
+                <span id="minimizeBtn" style="font-size:12px; color:#007aff; cursor:pointer; margin-left:auto;">[收合選單]</span>
+            </div>
+            
+            <div class="section-title">📂 1. 選取雲端模型：</div>
+            <select id="fileSelect">
+                <option value="">-- 載入列表中... --</option>
+            </select>
+
+            <button id="startCamBtn" class="btn-ar">
+                📷 點擊啟動實景鏡頭 (AR)
+            </button>
+
+            <hr style="border:0; border-top:1px solid #ddd; margin: 8px 0;">
+
+            <div class="section-title">☁️ 2. 上傳模型 (.glb, .stl)：</div>
+            <input type="file" id="glbUpload" accept=".glb,.stl">
+            <button id="uploadBtn" class="btn-upload">上傳並載入</button>
+
+            <div id="status" class="status">請選擇模型並開啟相機！</div>
+        </div>
+    </div>
+
+    <a-scene embedded vr-mode-ui="enabled: false" renderer="alpha: true; antialias: true;">
+        <a-assets id="assets-container"></a-assets>
+        <a-entity light="type: ambient; intensity: 1.2;"></a-entity>
+        <a-entity light="type: directional; intensity: 0.8;" position="-1 2 1"></a-entity>
+        <a-entity id="arModel" position="0 -0.5 -2" scale="1 1 1" rotation="0 0 0"></a-entity>
+        <a-entity cameraLook-controls></a-entity>
+    </a-scene>
+
+    <script>
+        // ⚠️ 請填入您的 GAS Web App 發布網址
+        const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE";
+
+        const mainCard = document.getElementById('mainCard');
+        const minimizeBtn = document.getElementById('minimizeBtn');
+        const expandBtn = document.getElementById('expandBtn');
+        const fileSelect = document.getElementById('fileSelect');
+        const startCamBtn = document.getElementById('startCamBtn');
+        const glbUpload = document.getElementById('glbUpload');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const statusDiv = document.getElementById('status');
+        const arModel = document.getElementById('arModel');
+        const cameraFeed = document.getElementById('ar-camera-feed');
+
+        let currentBlobUrl = null;
+
+        minimizeBtn.addEventListener('click', () => mainCard.classList.add('minimized'));
+        expandBtn.addEventListener('click', () => mainCard.classList.remove('minimized'));
+
+        window.onload = function() {
+            fetchFiles();
+        };
+
+        async function fetchFiles() {
+            try {
+                const res = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: "getFiles" })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    populateDropdown(data.files);
+                }
+            } catch (err) {
+                console.error(err);
+                statusDiv.textContent = '無法連線至雲端資料庫。';
+            }
+        }
+
+        function populateDropdown(files) {
+            fileSelect.innerHTML = '<option value="">-- 請選擇模型 --</option>';
+            if (Array.isArray(files) && files.length > 0) {
+                files.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.id;
+                    option.textContent = file.name;
+                    fileSelect.appendChild(option);
+                });
+            } else {
+                fileSelect.innerHTML = '<option value="">資料夾內尚無檔案</option>';
+            }
+        }
+
+        function convertStlToGlbBlob(arrayBuffer) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const loader = new THREE.STLLoader();
+                    const geometry = loader.parse(arrayBuffer);
+                    const material = new THREE.MeshStandardMaterial({ color: 0x909090, roughness: 0.5 });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    const scene = new THREE.Scene();
+                    scene.add(mesh);
+
+                    const exporter = new THREE.GLTFExporter();
+                    exporter.parse(scene, function (gltf) {
+                        const blob = new Blob([gltf], { type: 'model/gltf-binary' });
+                        resolve(blob);
+                    }, { binary: true });
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        }
+
+        async function loadModelFromBase64(base64Data, filename) {
+            statusDiv.textContent = '載入模型中...';
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            
+            let blob;
+            if (filename.toLowerCase().endsWith('.stl')) {
+                blob = await convertStlToGlbBlob(byteArray.buffer);
+            } else {
+                blob = new Blob([byteArray], {type: 'model/gltf-binary'});
+            }
+
+            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+            currentBlobUrl = URL.createObjectURL(blob);
+
+            arModel.removeAttribute('gltf-model');
+            arModel.setAttribute('gltf-model', currentBlobUrl);
+            
+            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入成功！可開啟相機。</span>';
+        }
+
+        startCamBtn.addEventListener('click', async () => {
+            try {
+                statusDiv.textContent = '啟動相機中...';
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } 
+                });
+                
+                cameraFeed.srcObject = stream;
+                cameraFeed.style.display = 'block';
+                await cameraFeed.play();
+                
+                statusDiv.textContent = 'AR 相機啟動成功！';
+                mainCard.classList.add('minimized');
+            } catch (err) {
+                alert('相機開啟失敗，請確認已授權相機權限。');
+                console.error(err);
+            }
+        });
+
+        fileSelect.addEventListener('change', async (e) => {
+            const fileId = e.target.value;
+            if (fileId) {
+                statusDiv.textContent = '從雲端下載模型中...';
+                const res = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: "getFileData", fileId: fileId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadModelFromBase64(data.base64, data.name);
+                }
+            }
+        });
+
+        uploadBtn.addEventListener('click', () => {
+            const file = glbUpload.files[0];
+            if (!file) return;
+
+            statusDiv.textContent = '檔案上傳中...';
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async function () {
+                const base64Data = reader.result.split(',')[1];
+                const res = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: "uploadFile",
+                        base64Data: base64Data,
+                        fileName: file.name,
+                        mimeType: file.type
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadModelFromBase64(base64Data, file.name);
+                    fetchFiles();
+                }
+            };
+        });
+    </script>
+</body>
+</html>
