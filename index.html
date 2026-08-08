@@ -3,215 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebAR 真實平面偵測</title>
+    <title>WebAR 掃描圖卡檢視器</title>
 
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <!-- 載入 A-Frame 1.3.0 (與 MindAR 相容性最佳) -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <!-- 載入相符版本的 Three.js 轉換器 -->
+    <script src="https://unpkg.com/three@0.137.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/exporters/GLTFExporter.js"></script>
+    <!-- 載入 MindAR 核心 (包含圖片編譯器) 與 A-Frame 綁定 -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
-        body { font-family: sans-serif; background-color: #121212; margin: 0; overflow: hidden; }
+        body { font-family: -apple-system, sans-serif; background-color: #121212; margin: 0; overflow: hidden; }
         
-        /* 1. 將控制卡片稍微往下移，留出頂部空間給 AR 按鈕 */
-        .controls-card { 
-            position: absolute; 
-            top: 80px; /* 原本是 10px，改為 80px 往下移 */
-            left: 50%; 
-            transform: translateX(-50%); 
-            background: rgba(255, 255, 255, 0.95); 
-            padding: 12px 15px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
-            width: 90%; 
-            max-width: 450px; 
-            z-index: 9999; 
+        .controls-card {
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: 90%; max-width: 400px;
+            z-index: 9999; max-height: 90vh; overflow-y: auto;
         }
+
+        .section-title { font-weight: bold; color: #333; font-size: 14px; margin-top: 10px; margin-bottom: 5px; border-bottom: 2px solid #007aff; padding-bottom: 3px; display: inline-block;}
+        select, input[type="file"], button { width: 100%; padding: 10px; margin: 4px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; box-sizing: border-box; }
         
-        select, input[type="file"], button { width: 100%; padding: 10px; margin: 4px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+        .btn-ar { background-color: #007aff; color: white; border: none; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 15px; padding: 12px; box-shadow: 0 4px 10px rgba(0,122,255,0.3); }
         .btn-upload { background-color: #34c759; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .status { font-size: 12px; color: #666; margin-top: 4px; text-align: center; }
+        .status { font-size: 13px; color: #d32f2f; margin-top: 8px; text-align: center; font-weight: bold; }
         
-        /* 2. 【關鍵】強制將 A-Frame 內建的 AR 按鈕移到右上角，並稍微放大 */
-        .a-enter-vr { 
-            top: 20px !important; 
-            bottom: auto !important; 
-            right: 20px !important; 
-            z-index: 10000 !important;
-            transform: scale(1.3); /* 將按鈕放大 1.3 倍，更容易點擊 */
-            transform-origin: top right;
+        /* 預覽圖片的樣式 */
+        .preview-container { text-align: center; margin-top: 5px; background: #eee; padding: 10px; border-radius: 8px; }
+        #previewImg { max-width: 100%; max-height: 120px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .preview-hint { font-size: 11px; color: #666; margin-top: 4px; }
+
+        #exitBtn {
+            position: fixed; top: 20px; right: 20px; z-index: 10000;
+            background: #ff3b30; color: white; border: none; padding: 10px 15px;
+            border-radius: 20px; font-weight: bold; display: none; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(255, 59, 48, 0.4);
         }
     </style>
 </head>
 <body>
 
+    <button id="exitBtn">✖ 退出 AR</button>
+
     <div class="controls-card" id="mainCard">
-        <div style="font-weight:bold; text-align:center; margin-bottom:6px;">WebAR 實境檢視器 (真實平面偵測)</div>
+        <div style="font-weight:bold; text-align:center; font-size:16px; margin-bottom:10px;">WebAR 掃描圖卡系統</div>
         
-        <div style="font-size: 13px; font-weight: bold; color: #333;">📂 1. 選取雲端模型：</div>
+        <!-- 第一區：3D 模型設定 -->
+        <div class="section-title">1. 設定 3D 模型 (.glb, .stl)</div>
         <select id="fileSelect">
-            <option value="">-- 載入列表中... --</option>
+            <option value="">-- 載入雲端列表中... --</option>
         </select>
+        <input type="file" id="glbUpload" accept=".glb,.stl" style="margin-top:8px;">
+        <button id="uploadBtn" class="btn-upload">上傳新模型</button>
+        <div id="modelStatus" style="font-size:12px; color:green; text-align:center; margin-top:4px;"></div>
 
-        <div style="font-size: 13px; font-weight: bold; color: #333; margin-top:8px;">☁️ 2. 上傳模型 (.glb, .stl)：</div>
-        <input type="file" id="glbUpload" accept=".glb,.stl">
-        <button id="uploadBtn" class="btn-upload">上傳並載入</button>
+        <hr style="border:0; border-top:1px solid #ddd; margin: 15px 0;">
 
-        <div id="status" class="status">正在檢查系統連線...</div>
-        
-        <!-- 給使用者的 AR 提示改為右上角 -->
-        <div style="font-size: 11px; color: #d32f2f; margin-top: 10px; text-align: center;">
-            ⚠️ 載入模型後，請點擊畫面<b>「右上角」</b>的 AR 按鈕<br>
-            (平面偵測功能目前僅支援 Android Chrome)
+        <!-- 第二區：偵測圖卡設定 -->
+        <div class="section-title">2. 設定要掃描的「偵測圖」</div>
+        <input type="file" id="targetUpload" accept="image/png, image/jpeg">
+        <div class="preview-container">
+            <!-- 預設提供一張測試用的圖卡 -->
+            <img id="previewImg" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" crossorigin="anonymous">
+            <div class="preview-hint">請用鏡頭掃描這張圖，模型將出現在圖面上</div>
         </div>
+
+        <button id="startCamBtn" class="btn-ar">
+            📷 編譯圖卡並啟動 AR
+        </button>
+        <div id="status" class="status">請先設定模型與圖卡</div>
     </div>
 
-    <!-- 
-      A-Frame WebXR 場景設定 
-      webxr="optionalFeatures: hit-test;" 這是啟動平面偵測的關鍵！
-    -->
-    <a-scene webxr="optionalFeatures: hit-test;" ar-hit-test="target: #arModel;" renderer="colorManagement: true;">
-        <a-assets id="assets-container"></a-assets>
-        
-        <!-- 環境光與平行光 -->
-        <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
-        <a-entity light="type: directional; intensity: 0.8;" position="-1 2 1"></a-entity>
-
-        <!-- 平面準星 (Reticle) -->
-        <a-entity id="reticle" visible="false">
-            <a-ring color="cyan" radius-inner="0.1" radius-outer="0.15" rotation="-90 0 0"></a-ring>
-        </a-entity>
-
-        <!-- 我們的 3D 模型 -->
-        <a-entity id="arModel" scale="1 1 1" visible="false"></a-entity>
-
-        <a-entity camera></a-entity>
-    </a-scene>
+    <!-- AR 容器，啟動時會動態注入 -->
+    <div id="ar-container" style="position: absolute; top:0; left:0; width:100%; height:100%; z-index:1;"></div>
 
     <script>
-        // ⚠️ 請保留您的 GAS API 網址
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxbCkcJYozNf2uJWRs7kB1FzmlCpPttHPTSbJvOLqMvLqwRpJ2HSAq-bqHtERBbSw8QAw/exec";
+        // ==========================================
+        // 已經為您替換為最新專屬的 GAS API 網址
+        // ==========================================
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxrcepwMRmGzdAA2X3PG8Mt7ctrhMgnXvKWmhPgP3zx-vQUUqk7_NxDmsIfm9LALZht/exec";
 
         const fileSelect = document.getElementById('fileSelect');
         const glbUpload = document.getElementById('glbUpload');
         const uploadBtn = document.getElementById('uploadBtn');
+        const targetUpload = document.getElementById('targetUpload');
+        const previewImg = document.getElementById('previewImg');
+        const startCamBtn = document.getElementById('startCamBtn');
         const statusDiv = document.getElementById('status');
-        const arModel = document.getElementById('arModel');
-        const reticle = document.getElementById('reticle');
-        const sceneEl = document.querySelector('a-scene');
+        const modelStatus = document.getElementById('modelStatus');
         const mainCard = document.getElementById('mainCard');
+        const arContainer = document.getElementById('ar-container');
+        const exitBtn = document.getElementById('exitBtn');
 
-        let currentBlobUrl = null;
-        let modelLoaded = false;
+        let currentModelBlobUrl = null;
+        let targetImageUrl = previewImg.src;
 
-        window.onload = function() {
-            fetchFiles();
-        };
+        window.onload = fetchFiles;
 
+        // --- 1. 取得與處理 3D 模型 ---
         async function fetchFiles() {
             try {
                 const res = await fetch(`${GAS_API_URL}?action=getFiles`);
                 const data = await res.json();
                 if (data.success) {
-                    populateDropdown(data.files);
-                    statusDiv.innerHTML = '<span style="color:green; font-weight:bold;">連線成功！請選擇模型。</span>';
+                    fileSelect.innerHTML = '<option value="">-- 請選擇模型 --</option>';
+                    data.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file.id;
+                        option.textContent = file.name;
+                        fileSelect.appendChild(option);
+                    });
+                    statusDiv.textContent = "系統就緒，請設定模型與圖卡";
+                    statusDiv.style.color = "green";
                 }
             } catch (err) {
-                statusDiv.innerHTML = '<span style="color:red;">連線失敗。</span>';
+                statusDiv.textContent = '無法連線至雲端資料庫。';
             }
-        }
-
-        function populateDropdown(files) {
-            fileSelect.innerHTML = '<option value="">-- 請選擇模型 --</option>';
-            if (Array.isArray(files) && files.length > 0) {
-                files.forEach(file => {
-                    const option = document.createElement('option');
-                    option.value = file.id;
-                    option.textContent = file.name;
-                    fileSelect.appendChild(option);
-                });
-            }
-        }
-
-        // WebXR Hit Test 邏輯
-        sceneEl.addEventListener('enter-vr', function () {
-            if (sceneEl.is('ar-mode')) {
-                mainCard.style.display = 'none'; // 隱藏面板
-                sceneEl.addEventListener('ar-hit-test-start', function () {
-                    reticle.setAttribute('visible', 'true');
-                });
-                sceneEl.addEventListener('ar-hit-test-achieved', function () {
-                    reticle.setAttribute('visible', 'true');
-                });
-                sceneEl.addEventListener('ar-hit-test-lost', function () {
-                    reticle.setAttribute('visible', 'false');
-                });
-            }
-        });
-
-        sceneEl.addEventListener('exit-vr', function () {
-            mainCard.style.display = 'block'; // 離開AR後顯示面板
-            reticle.setAttribute('visible', 'false');
-            arModel.setAttribute('visible', 'false');
-        });
-
-        sceneEl.addEventListener('click', function () {
-            if (sceneEl.is('ar-mode') && reticle.getAttribute('visible') === true && modelLoaded) {
-                arModel.setAttribute('position', reticle.getAttribute('position'));
-                arModel.setAttribute('visible', 'true');
-            }
-        });
-
-        function convertStlToGlbBlob(arrayBuffer) {
-            return new Promise((resolve, reject) => {
-                try {
-                    const loader = new THREE.STLLoader();
-                    const geometry = loader.parse(arrayBuffer);
-                    const material = new THREE.MeshStandardMaterial({ color: 0x909090, roughness: 0.5 });
-                    const mesh = new THREE.Mesh(geometry, material);
-                    const scene = new THREE.Scene();
-                    scene.add(mesh);
-                    const exporter = new THREE.GLTFExporter();
-                    exporter.parse(scene, function (gltf) {
-                        const blob = new Blob([gltf], { type: 'model/gltf-binary' });
-                        resolve(blob);
-                    }, { binary: true });
-                } catch (e) {
-                    reject(e);
-                }
-            });
-        }
-
-        async function loadModelFromBase64(base64Data, filename) {
-            statusDiv.textContent = '解析並載入模型中...';
-            const byteCharacters = atob(base64Data);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            
-            let blob;
-            if (filename.toLowerCase().endsWith('.stl')) {
-                blob = await convertStlToGlbBlob(byteArray.buffer);
-            } else {
-                blob = new Blob([byteArray], {type: 'model/gltf-binary'});
-            }
-
-            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
-            currentBlobUrl = URL.createObjectURL(blob);
-
-            arModel.removeAttribute('gltf-model');
-            arModel.setAttribute('gltf-model', currentBlobUrl);
-            modelLoaded = true;
-            
-            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入完成！<br>請點擊右上角「AR」按鈕進入平面偵測。</span>';
         }
 
         fileSelect.addEventListener('change', async (e) => {
             const fileId = e.target.value;
             if (fileId) {
-                statusDiv.textContent = '下載模型中，請稍候...';
-                modelLoaded = false;
+                modelStatus.textContent = '從雲端下載模型中...';
                 try {
                     const res = await fetch(`${GAS_API_URL}?action=getFileData&fileId=${fileId}`);
                     const data = await res.json();
@@ -219,22 +135,16 @@
                         loadModelFromBase64(data.base64, data.name);
                     }
                 } catch(err) {
-                    statusDiv.textContent = '下載連線發生錯誤。';
+                    modelStatus.textContent = '下載連線發生錯誤。';
                 }
             }
         });
 
         uploadBtn.addEventListener('click', () => {
             const file = glbUpload.files[0];
-            if (!file) {
-                alert("請先選擇要上傳的檔案！");
-                return;
-            }
-
-            statusDiv.textContent = '檔案上傳中...';
+            if (!file) { alert("請先選擇要上傳的模型檔案！"); return; }
+            modelStatus.textContent = '模型上傳中...';
             uploadBtn.disabled = true;
-            modelLoaded = false;
-
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = async function () {
@@ -243,12 +153,7 @@
                     const res = await fetch(GAS_API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({
-                            action: "uploadFile",
-                            base64Data: base64Data,
-                            fileName: file.name,
-                            mimeType: file.type
-                        })
+                        body: JSON.stringify({ action: "uploadFile", base64Data: base64Data, fileName: file.name, mimeType: file.type })
                     });
                     const data = await res.json();
                     if (data.success) {
@@ -256,11 +161,115 @@
                         fetchFiles();
                     }
                 } catch(err) {
-                    statusDiv.innerHTML = '<span style="color:red;">上傳連線失敗。</span>';
+                    modelStatus.textContent = '上傳失敗。';
                 } finally {
                     uploadBtn.disabled = false;
                 }
             };
+        });
+
+        async function loadModelFromBase64(base64Data, filename) {
+            modelStatus.textContent = '解析模型中...';
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
+            const byteArray = new Uint8Array(byteNumbers);
+            let blob;
+
+            if (filename.toLowerCase().endsWith('.stl')) {
+                blob = await new Promise((resolve) => {
+                    const loader = new THREE.STLLoader();
+                    const geometry = loader.parse(byteArray.buffer);
+                    const material = new THREE.MeshStandardMaterial({ color: 0x909090, roughness: 0.5 });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    const scene = new THREE.Scene();
+                    scene.add(mesh);
+                    const exporter = new THREE.GLTFExporter();
+                    exporter.parse(scene, function (gltf) {
+                        resolve(new Blob([gltf], { type: 'model/gltf-binary' }));
+                    }, { binary: true });
+                });
+            } else {
+                blob = new Blob([byteArray], {type: 'model/gltf-binary'});
+            }
+
+            if (currentModelBlobUrl) URL.revokeObjectURL(currentModelBlobUrl);
+            currentModelBlobUrl = URL.createObjectURL(blob);
+            modelStatus.textContent = '✅ 模型準備就緒！';
+        }
+
+        // --- 2. 處理使用者上傳「偵測圖」 ---
+        targetUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                targetImageUrl = URL.createObjectURL(file);
+                previewImg.src = targetImageUrl;
+                previewImg.removeAttribute("crossorigin");
+            }
+        });
+
+        // --- 3. 核心：在瀏覽器端將圖片編譯成 MindAR 偵測檔 ---
+        async function compileImageToMind(imageUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                if (imageUrl.startsWith('http')) img.crossOrigin = "anonymous";
+                
+                img.onload = async () => {
+                    try {
+                        const compiler = new MINDAR.IMAGE.Compiler();
+                        await compiler.compileImageTargets([img]);
+                        const exportedData = compiler.exportData();
+                        const blob = new Blob([exportedData], { type: 'application/octet-stream' });
+                        resolve(URL.createObjectURL(blob));
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                img.onerror = () => reject("圖片載入失敗");
+                img.src = imageUrl;
+            });
+        }
+
+        // --- 4. 啟動 AR ---
+        startCamBtn.addEventListener('click', async () => {
+            if (!currentModelBlobUrl) {
+                alert('請先選擇或上傳一個 3D 模型！');
+                return;
+            }
+
+            statusDiv.style.color = "#007aff";
+            statusDiv.textContent = '正在利用 AI 演算法編譯偵測圖，請稍候... (手機可能需要幾秒鐘)';
+            startCamBtn.disabled = true;
+
+            try {
+                // 1. 編譯圖卡
+                const mindUrl = await compileImageToMind(targetImageUrl);
+                
+                // 2. 隱藏控制面板，顯示退出按鈕
+                mainCard.style.display = 'none';
+                exitBtn.style.display = 'block';
+
+                // 3. 動態注入 A-Frame 場景
+                arContainer.innerHTML = `
+                    <a-scene mindar-image="imageTargetSrc: ${mindUrl}; autoStart: true; uiScanning: no;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+                        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+                        <a-entity mindar-image-target="targetIndex: 0">
+                            <!-- 依需求可調整 scale，預設為 1 1 1 -->
+                            <a-gltf-model src="${currentModelBlobUrl}" position="0 0 0" scale="1 1 1" rotation="0 0 0"></a-gltf-model>
+                        </a-entity>
+                    </a-scene>
+                `;
+            } catch (err) {
+                statusDiv.style.color = "red";
+                statusDiv.textContent = '圖卡編譯失敗，請換一張對比度與特徵較明顯的圖片。';
+                startCamBtn.disabled = false;
+                console.error(err);
+            }
+        });
+
+        // 退出 AR，重整頁面
+        exitBtn.addEventListener('click', () => {
+            window.location.reload();
         });
     </script>
 </body>
