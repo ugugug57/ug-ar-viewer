@@ -3,117 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebAR 實境檢視器 (MyWebAR 架構)</title>
+    <title>WebAR 真實平面偵測</title>
 
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
 
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: transparent; color: #333; margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
-        .controls-card { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.95); padding: 12px 15px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: 90%; max-width: 450px; box-sizing: border-box; z-index: 9999; transition: all 0.3s ease; }
-        .controls-card.minimized { padding: 6px 12px; width: auto; border-radius: 20px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(5px); }
-        .controls-card.minimized .card-content { display: none; }
-        .controls-card.minimized .minimized-toggle { display: flex !important; }
-        .minimized-toggle { display: none; align-items: center; gap: 6px; font-weight: bold; font-size: 13px; cursor: pointer; color: #007aff; }
-        select, input[type="file"], button { width: 100%; padding: 10px; margin: 4px 0; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
-        .btn-ar { background-color: #007aff; color: white; border: none; font-weight: bold; font-size: 15px; cursor: pointer; }
+        body { font-family: sans-serif; background-color: #121212; margin: 0; overflow: hidden; }
+        .controls-card { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.95); padding: 12px 15px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: 90%; max-width: 450px; z-index: 9999; }
+        select, input[type="file"], button { width: 100%; padding: 10px; margin: 4px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
         .btn-upload { background-color: #34c759; color: white; border: none; font-weight: bold; cursor: pointer; }
         .status { font-size: 12px; color: #666; margin-top: 4px; text-align: center; }
-        .section-title { font-weight: bold; color: #333; font-size: 13px; }
-        #ar-camera-feed { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; display: none; }
-        a-scene { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        /* A-Frame 內建的 AR 按鈕我們讓它明顯一點 */
+        .a-enter-vr { bottom: 20px !important; right: 20px !important; }
     </style>
 </head>
 <body>
 
-    <video id="ar-camera-feed" autoplay playsinline muted></video>
-
     <div class="controls-card" id="mainCard">
-        <div class="minimized-toggle" id="expandBtn">
-            <span>⚙️ 展開選單 / 切換模型</span>
-        </div>
+        <div style="font-weight:bold; text-align:center; margin-bottom:6px;">WebAR 實境檢視器 (真實平面偵測)</div>
+        
+        <div style="font-size: 13px; font-weight: bold; color: #333;">📂 1. 選取雲端模型：</div>
+        <select id="fileSelect">
+            <option value="">-- 載入列表中... --</option>
+        </select>
 
-        <div class="card-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <div style="font-weight:bold;">WebAR 實境檢視器</div>
-                <span id="minimizeBtn" style="font-size:12px; color:#007aff; cursor:pointer; margin-left:auto;">[收合選單]</span>
-            </div>
-            
-            <div class="section-title">📂 1. 選取雲端模型：</div>
-            <select id="fileSelect">
-                <option value="">-- 載入列表中... --</option>
-            </select>
+        <div style="font-size: 13px; font-weight: bold; color: #333; margin-top:8px;">☁️ 2. 上傳模型 (.glb, .stl)：</div>
+        <input type="file" id="glbUpload" accept=".glb,.stl">
+        <button id="uploadBtn" class="btn-upload">上傳並載入</button>
 
-            <button id="startCamBtn" class="btn-ar">
-                📷 點擊啟動實景鏡頭 (AR)
-            </button>
-
-            <hr style="border:0; border-top:1px solid #ddd; margin: 8px 0;">
-
-            <div class="section-title">☁️ 2. 上傳模型 (.glb, .stl)：</div>
-            <input type="file" id="glbUpload" accept=".glb,.stl">
-            <button id="uploadBtn" class="btn-upload">上傳並載入</button>
-
-            <div id="status" class="status">正在檢查系統連線...</div>
+        <div id="status" class="status">正在檢查系統連線...</div>
+        
+        <!-- 給使用者的 AR 提示 -->
+        <div style="font-size: 11px; color: #d32f2f; margin-top: 10px; text-align: center;">
+            ⚠️ 載入模型後，請點擊畫面右下角的 <b>「AR / VR 按鈕」</b><br>
+            (平面偵測功能目前僅支援 Android Chrome)
         </div>
     </div>
 
-    <a-scene embedded vr-mode-ui="enabled: false" renderer="alpha: true; antialias: true;">
+    <!-- 
+      A-Frame WebXR 場景設定 
+      webxr="optionalFeatures: hit-test;" 這是啟動平面偵測的關鍵！
+    -->
+    <a-scene webxr="optionalFeatures: hit-test;" ar-hit-test="target: #arModel;" renderer="colorManagement: true;">
         <a-assets id="assets-container"></a-assets>
-        <a-entity light="type: ambient; intensity: 1.2;"></a-entity>
+        
+        <!-- 環境光與平行光 -->
+        <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
         <a-entity light="type: directional; intensity: 0.8;" position="-1 2 1"></a-entity>
-        <a-entity id="arModel" position="0 0 -2" scale="1 1 1" rotation="0 0 0"></a-entity>
-        <a-entity cameraLook-controls></a-entity>
+
+        <!-- 
+          平面準星 (Reticle)：當手機偵測到真實平面時，會顯示這個圓圈 
+        -->
+        <a-entity id="reticle" visible="false">
+            <a-ring color="cyan" radius-inner="0.1" radius-outer="0.15" rotation="-90 0 0"></a-ring>
+        </a-entity>
+
+        <!-- 
+          我們的 3D 模型。一開始隱藏，點擊螢幕後才會放在準星的位置 
+        -->
+        <a-entity id="arModel" scale="1 1 1" visible="false"></a-entity>
+
+        <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-        // ==========================================
-        // 已經為您替換為專屬的 GAS 部署網址
-        // ==========================================
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxbCkcJYozNf2uJWRs7kB1FzmlCpPttHPTSbJvOLqMvLqwRpJ2HSAq-bqHtERBbSw8QAw/exec"; 
+        // ⚠️ 請貼上您的 GAS API 網址
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxbCkcJYozNf2uJWRs7kB1FzmlCpPttHPTSbJvOLqMvLqwRpJ2HSAq-bqHtERBbSw8QAw/exec";
 
-        const mainCard = document.getElementById('mainCard');
-        const minimizeBtn = document.getElementById('minimizeBtn');
-        const expandBtn = document.getElementById('expandBtn');
         const fileSelect = document.getElementById('fileSelect');
-        const startCamBtn = document.getElementById('startCamBtn');
         const glbUpload = document.getElementById('glbUpload');
         const uploadBtn = document.getElementById('uploadBtn');
         const statusDiv = document.getElementById('status');
         const arModel = document.getElementById('arModel');
-        const cameraFeed = document.getElementById('ar-camera-feed');
+        const reticle = document.getElementById('reticle');
+        const sceneEl = document.querySelector('a-scene');
+        const mainCard = document.getElementById('mainCard');
 
         let currentBlobUrl = null;
-
-        minimizeBtn.addEventListener('click', () => mainCard.classList.add('minimized'));
-        expandBtn.addEventListener('click', () => mainCard.classList.remove('minimized'));
+        let modelLoaded = false;
 
         window.onload = function() {
-            // 防呆檢查：確認使用者是否有替換網址
-            if (GAS_API_URL.indexOf("script.google.com") === -1) {
-                statusDiv.innerHTML = '<span style="color:red; font-weight:bold;">⚠️ 嚴重錯誤：請先在程式碼第 114 行填入您的 GAS 網址！</span>';
-                return;
-            }
             fetchFiles();
         };
 
         async function fetchFiles() {
             try {
-                // 發送 GET 請求取得列表
                 const res = await fetch(`${GAS_API_URL}?action=getFiles`);
-                if (!res.ok) throw new Error("HTTP 狀態碼異常：" + res.status);
-                
                 const data = await res.json();
                 if (data.success) {
                     populateDropdown(data.files);
-                    statusDiv.innerHTML = '<span style="color:green; font-weight:bold;">連線成功！請選擇模型並開啟相機。</span>';
-                } else {
-                    statusDiv.textContent = '讀取失敗：' + data.error;
+                    statusDiv.innerHTML = '<span style="color:green; font-weight:bold;">連線成功！請選擇模型。</span>';
                 }
             } catch (err) {
-                console.error("Fetch 錯誤詳細資訊:", err);
-                statusDiv.innerHTML = '<span style="color:red;">連線失敗：請確認 GAS 權限已設為「所有人」且部署為「最新版本」。</span>';
+                statusDiv.innerHTML = '<span style="color:red;">連線失敗。</span>';
             }
         }
 
@@ -126,10 +110,44 @@
                     option.textContent = file.name;
                     fileSelect.appendChild(option);
                 });
-            } else {
-                fileSelect.innerHTML = '<option value="">資料夾內尚無檔案</option>';
             }
         }
+
+        // WebXR Hit Test 邏輯：當進入 AR 模式時
+        sceneEl.addEventListener('enter-vr', function () {
+            if (sceneEl.is('ar-mode')) {
+                // 隱藏 HTML 控制卡片，讓畫面乾淨
+                mainCard.style.display = 'none';
+                
+                // 啟動平面準星監聽
+                sceneEl.addEventListener('ar-hit-test-start', function () {
+                    reticle.setAttribute('visible', 'true');
+                });
+
+                sceneEl.addEventListener('ar-hit-test-achieved', function () {
+                    reticle.setAttribute('visible', 'true');
+                });
+
+                sceneEl.addEventListener('ar-hit-test-lost', function () {
+                    reticle.setAttribute('visible', 'false');
+                });
+            }
+        });
+
+        // 離開 AR 模式時，把卡片叫回來
+        sceneEl.addEventListener('exit-vr', function () {
+            mainCard.style.display = 'block';
+            reticle.setAttribute('visible', 'false');
+            arModel.setAttribute('visible', 'false');
+        });
+
+        // 當使用者在 AR 畫面點擊螢幕時，把模型放在準星的位置
+        sceneEl.addEventListener('click', function () {
+            if (sceneEl.is('ar-mode') && reticle.getAttribute('visible') === true && modelLoaded) {
+                arModel.setAttribute('position', reticle.getAttribute('position'));
+                arModel.setAttribute('visible', 'true');
+            }
+        });
 
         function convertStlToGlbBlob(arrayBuffer) {
             return new Promise((resolve, reject) => {
@@ -172,44 +190,24 @@
 
             arModel.removeAttribute('gltf-model');
             arModel.setAttribute('gltf-model', currentBlobUrl);
+            modelLoaded = true;
             
-            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入成功！點擊上方按鈕開啟相機。</span>';
+            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入完成！<br>請點擊右下角「AR」按鈕進入平面偵測模式。</span>';
         }
-
-        startCamBtn.addEventListener('click', async () => {
-            try {
-                statusDiv.textContent = '啟動相機中...';
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" } 
-                });
-                
-                cameraFeed.srcObject = stream;
-                cameraFeed.style.display = 'block';
-                await cameraFeed.play();
-                
-                statusDiv.textContent = 'AR 相機啟動成功！';
-                mainCard.classList.add('minimized');
-            } catch (err) {
-                alert('相機開啟失敗，請確認已授權瀏覽器相機權限。');
-                console.error(err);
-            }
-        });
 
         fileSelect.addEventListener('change', async (e) => {
             const fileId = e.target.value;
             if (fileId) {
-                statusDiv.textContent = '從雲端下載模型中，請稍候...';
+                statusDiv.textContent = '下載模型中，請稍候...';
+                modelLoaded = false;
                 try {
                     const res = await fetch(`${GAS_API_URL}?action=getFileData&fileId=${fileId}`);
                     const data = await res.json();
                     if (data.success) {
                         loadModelFromBase64(data.base64, data.name);
-                    } else {
-                        statusDiv.textContent = '下載失敗：' + data.error;
                     }
                 } catch(err) {
                     statusDiv.textContent = '下載連線發生錯誤。';
-                    console.error(err);
                 }
             }
         });
@@ -221,15 +219,15 @@
                 return;
             }
 
-            statusDiv.textContent = '檔案上傳中，這可能需要一點時間...';
+            statusDiv.textContent = '檔案上傳中...';
             uploadBtn.disabled = true;
+            modelLoaded = false;
 
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = async function () {
                 const base64Data = reader.result.split(',')[1];
                 try {
-                    // 使用 text/plain 發送 POST 請求，避免觸發複雜的 CORS 預檢
                     const res = await fetch(GAS_API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -244,12 +242,9 @@
                     if (data.success) {
                         loadModelFromBase64(base64Data, file.name);
                         fetchFiles();
-                    } else {
-                        statusDiv.textContent = '上傳失敗：' + data.error;
                     }
                 } catch(err) {
-                    statusDiv.innerHTML = '<span style="color:red;">上傳連線失敗，請檢查網址或權限設定。</span>';
-                    console.error(err);
+                    statusDiv.innerHTML = '<span style="color:red;">上傳連線失敗。</span>';
                 } finally {
                     uploadBtn.disabled = false;
                 }
