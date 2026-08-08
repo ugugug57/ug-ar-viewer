@@ -3,96 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebAR 實境檢視器</title>
+    <title>WebAR 實境檢視器 (MyWebAR 架構)</title>
 
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
 
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: transparent;
-            color: #333;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .controls-card {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 12px 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            width: 90%;
-            max-width: 450px;
-            box-sizing: border-box;
-            z-index: 9999;
-            transition: all 0.3s ease;
-        }
-
-        .controls-card.minimized {
-            padding: 6px 12px;
-            width: auto;
-            border-radius: 20px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(5px);
-        }
-
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: transparent; color: #333; margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        .controls-card { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.95); padding: 12px 15px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); width: 90%; max-width: 450px; box-sizing: border-box; z-index: 9999; transition: all 0.3s ease; }
+        .controls-card.minimized { padding: 6px 12px; width: auto; border-radius: 20px; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(5px); }
         .controls-card.minimized .card-content { display: none; }
         .controls-card.minimized .minimized-toggle { display: flex !important; }
-
-        .minimized-toggle {
-            display: none;
-            align-items: center;
-            gap: 6px;
-            font-weight: bold;
-            font-size: 13px;
-            cursor: pointer;
-            color: #007aff;
-        }
-
-        select, input[type="file"], button {
-            width: 100%;
-            padding: 10px;
-            margin: 4px 0;
-            box-sizing: border-box;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            font-size: 14px;
-        }
-
+        .minimized-toggle { display: none; align-items: center; gap: 6px; font-weight: bold; font-size: 13px; cursor: pointer; color: #007aff; }
+        select, input[type="file"], button { width: 100%; padding: 10px; margin: 4px 0; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
         .btn-ar { background-color: #007aff; color: white; border: none; font-weight: bold; font-size: 15px; cursor: pointer; }
         .btn-upload { background-color: #34c759; color: white; border: none; font-weight: bold; cursor: pointer; }
         .status { font-size: 12px; color: #666; margin-top: 4px; text-align: center; }
         .section-title { font-weight: bold; color: #333; font-size: 13px; }
-
-        #ar-camera-feed {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            object-fit: cover;
-            z-index: 0;
-            display: none;
-        }
-
-        a-scene {
-            width: 100vw;
-            height: 100vh;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
+        #ar-camera-feed { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; display: none; }
+        a-scene { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
     </style>
 </head>
 <body>
@@ -105,7 +35,7 @@
         </div>
 
         <div class="card-content">
-            <div style="display:flex; justify-size:space-between; align-items:center; margin-bottom:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <div style="font-weight:bold;">WebAR 實境檢視器</div>
                 <span id="minimizeBtn" style="font-size:12px; color:#007aff; cursor:pointer; margin-left:auto;">[收合選單]</span>
             </div>
@@ -125,7 +55,7 @@
             <input type="file" id="glbUpload" accept=".glb,.stl">
             <button id="uploadBtn" class="btn-upload">上傳並載入</button>
 
-            <div id="status" class="status">連線中...</div>
+            <div id="status" class="status">正在檢查系統連線...</div>
         </div>
     </div>
 
@@ -138,8 +68,11 @@
     </a-scene>
 
     <script>
-        // ⚠️ 請修改此處為你的 GAS 部署網址 (/exec 結尾)
-        const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE";
+        // ==========================================
+        // ⚠️【必須修改】請將下方的引號內容，替換為您 GAS 部署的網址！
+        // 確保網址是以 https://script.google.com/macros/s/ 開頭，並以 /exec 結尾
+        // ==========================================
+        const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE"; 
 
         const mainCard = document.getElementById('mainCard');
         const minimizeBtn = document.getElementById('minimizeBtn');
@@ -158,24 +91,32 @@
         expandBtn.addEventListener('click', () => mainCard.classList.remove('minimized'));
 
         window.onload = function() {
-            fetchFilesJsonp();
-        };
-
-        // 利用 JSONP 技術 100% 避開 CORS 阻擋
-        function fetchFilesJsonp() {
-            const script = document.createElement('script');
-            script.src = `${GAS_API_URL}?action=getFiles&callback=handleGetFilesResponse`;
-            document.body.appendChild(script);
-        }
-
-        window.handleGetFilesResponse = function(data) {
-            if (data.success) {
-                populateDropdown(data.files);
-                statusDiv.textContent = '選取模型後即可開啟相機！';
-            } else {
-                statusDiv.textContent = '讀取失敗：' + data.error;
+            // 防呆檢查：確認使用者是否有替換網址
+            if (GAS_API_URL.indexOf("script.google.com") === -1) {
+                statusDiv.innerHTML = '<span style="color:red; font-weight:bold;">⚠️ 嚴重錯誤：請先在程式碼第 114 行填入您的 GAS 網址！</span>';
+                return;
             }
+            fetchFiles();
         };
+
+        async function fetchFiles() {
+            try {
+                // 發送 GET 請求取得列表
+                const res = await fetch(`${GAS_API_URL}?action=getFiles`);
+                if (!res.ok) throw new Error("HTTP 狀態碼異常：" + res.status);
+                
+                const data = await res.json();
+                if (data.success) {
+                    populateDropdown(data.files);
+                    statusDiv.innerHTML = '<span style="color:green; font-weight:bold;">連線成功！請選擇模型並開啟相機。</span>';
+                } else {
+                    statusDiv.textContent = '讀取失敗：' + data.error;
+                }
+            } catch (err) {
+                console.error("Fetch 錯誤詳細資訊:", err);
+                statusDiv.innerHTML = '<span style="color:red;">連線失敗：請確認 GAS 權限已設為「所有人」且部署為「最新版本」。</span>';
+            }
+        }
 
         function populateDropdown(files) {
             fileSelect.innerHTML = '<option value="">-- 請選擇模型 --</option>';
@@ -200,7 +141,6 @@
                     const mesh = new THREE.Mesh(geometry, material);
                     const scene = new THREE.Scene();
                     scene.add(mesh);
-
                     const exporter = new THREE.GLTFExporter();
                     exporter.parse(scene, function (gltf) {
                         const blob = new Blob([gltf], { type: 'model/gltf-binary' });
@@ -234,7 +174,7 @@
             arModel.removeAttribute('gltf-model');
             arModel.setAttribute('gltf-model', currentBlobUrl);
             
-            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入成功！點擊開啟相機。</span>';
+            statusDiv.innerHTML = '<span style="color:#007aff; font-weight:bold;">模型載入成功！點擊上方按鈕開啟相機。</span>';
         }
 
         startCamBtn.addEventListener('click', async () => {
@@ -256,56 +196,64 @@
             }
         });
 
-        fileSelect.addEventListener('change', (e) => {
+        fileSelect.addEventListener('change', async (e) => {
             const fileId = e.target.value;
             if (fileId) {
-                statusDiv.textContent = '從雲端下載模型中...';
-                const script = document.createElement('script');
-                script.src = `${GAS_API_URL}?action=getFileData&fileId=${fileId}&callback=handleFileDataResponse`;
-                document.body.appendChild(script);
+                statusDiv.textContent = '從雲端下載模型中，請稍候...';
+                try {
+                    const res = await fetch(`${GAS_API_URL}?action=getFileData&fileId=${fileId}`);
+                    const data = await res.json();
+                    if (data.success) {
+                        loadModelFromBase64(data.base64, data.name);
+                    } else {
+                        statusDiv.textContent = '下載失敗：' + data.error;
+                    }
+                } catch(err) {
+                    statusDiv.textContent = '下載連線發生錯誤。';
+                    console.error(err);
+                }
             }
         });
-
-        window.handleFileDataResponse = function(data) {
-            if (data.success) {
-                loadModelFromBase64(data.base64, data.name);
-            } else {
-                statusDiv.textContent = '下載失敗：' + data.error;
-            }
-        };
 
         uploadBtn.addEventListener('click', () => {
             const file = glbUpload.files[0];
             if (!file) {
-                alert("請先選擇檔案！");
+                alert("請先選擇要上傳的檔案！");
                 return;
             }
 
-            statusDiv.textContent = '檔案上傳中...';
+            statusDiv.textContent = '檔案上傳中，這可能需要一點時間...';
+            uploadBtn.disabled = true;
+
             const reader = new FileReader();
             reader.readAsDataURL(file);
-            reader.onload = function () {
+            reader.onload = async function () {
                 const base64Data = reader.result.split(',')[1];
-                
-                // 使用 fetch no-cors / follow mode 上傳
-                fetch(GAS_API_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({
-                        action: "uploadFile",
-                        base64Data: base64Data,
-                        fileName: file.name,
-                        mimeType: file.type
-                    })
-                }).then(() => {
-                    statusDiv.textContent = '上傳完成！刷新清單中...';
-                    loadModelFromBase64(base64Data, file.name);
-                    setTimeout(fetchFilesJsonp, 2000);
-                }).catch(err => {
-                    statusDiv.textContent = '上傳連線失敗';
+                try {
+                    // 使用 text/plain 發送 POST 請求，避免觸發複雜的 CORS 預檢
+                    const res = await fetch(GAS_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: "uploadFile",
+                            base64Data: base64Data,
+                            fileName: file.name,
+                            mimeType: file.type
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        loadModelFromBase64(base64Data, file.name);
+                        fetchFiles();
+                    } else {
+                        statusDiv.textContent = '上傳失敗：' + data.error;
+                    }
+                } catch(err) {
+                    statusDiv.innerHTML = '<span style="color:red;">上傳連線失敗，請檢查網址或權限設定。</span>';
                     console.error(err);
-                });
+                } finally {
+                    uploadBtn.disabled = false;
+                }
             };
         });
     </script>
