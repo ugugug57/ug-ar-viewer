@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebAR 實境檢視器 (MyWebAR 架構)</title>
+    <title>WebAR 實境檢視器</title>
 
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
@@ -105,7 +105,7 @@
         </div>
 
         <div class="card-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="display:flex; justify-size:space-between; align-items:center; margin-bottom:6px;">
                 <div style="font-weight:bold;">WebAR 實境檢視器</div>
                 <span id="minimizeBtn" style="font-size:12px; color:#007aff; cursor:pointer; margin-left:auto;">[收合選單]</span>
             </div>
@@ -125,7 +125,7 @@
             <input type="file" id="glbUpload" accept=".glb,.stl">
             <button id="uploadBtn" class="btn-upload">上傳並載入</button>
 
-            <div id="status" class="status">請選擇模型並開啟相機！</div>
+            <div id="status" class="status">連線中...</div>
         </div>
     </div>
 
@@ -138,7 +138,7 @@
     </a-scene>
 
     <script>
-        // ⚠️【必須修改】請貼上您最新部署的 GAS /exec 網址
+        // ⚠️ 請修改此處為你的 GAS 部署網址 (/exec 結尾)
         const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE";
 
         const mainCard = document.getElementById('mainCard');
@@ -158,25 +158,24 @@
         expandBtn.addEventListener('click', () => mainCard.classList.remove('minimized'));
 
         window.onload = function() {
-            fetchFiles();
+            fetchFilesJsonp();
         };
 
-        // 改為 GET 請求以 100% 避開 CORS 阻擋
-        async function fetchFiles() {
-            try {
-                const res = await fetch(`${GAS_API_URL}?action=getFiles`);
-                const data = await res.json();
-                if (data.success) {
-                    populateDropdown(data.files);
-                    statusDiv.textContent = '選取模型後即可開啟相機！';
-                } else {
-                    statusDiv.textContent = '讀取失敗：' + data.error;
-                }
-            } catch (err) {
-                console.error(err);
-                statusDiv.textContent = '無法連線至雲端資料庫，請檢查網址或部署權限。';
-            }
+        // 利用 JSONP 技術 100% 避開 CORS 阻擋
+        function fetchFilesJsonp() {
+            const script = document.createElement('script');
+            script.src = `${GAS_API_URL}?action=getFiles&callback=handleGetFilesResponse`;
+            document.body.appendChild(script);
         }
+
+        window.handleGetFilesResponse = function(data) {
+            if (data.success) {
+                populateDropdown(data.files);
+                statusDiv.textContent = '選取模型後即可開啟相機！';
+            } else {
+                statusDiv.textContent = '讀取失敗：' + data.error;
+            }
+        };
 
         function populateDropdown(files) {
             fileSelect.innerHTML = '<option value="">-- 請選擇模型 --</option>';
@@ -257,24 +256,23 @@
             }
         });
 
-        fileSelect.addEventListener('change', async (e) => {
+        fileSelect.addEventListener('change', (e) => {
             const fileId = e.target.value;
             if (fileId) {
                 statusDiv.textContent = '從雲端下載模型中...';
-                try {
-                    const res = await fetch(`${GAS_API_URL}?action=getFileData&fileId=${fileId}`);
-                    const data = await res.json();
-                    if (data.success) {
-                        loadModelFromBase64(data.base64, data.name);
-                    } else {
-                        statusDiv.textContent = '下載失敗：' + data.error;
-                    }
-                } catch(err) {
-                    statusDiv.textContent = '下載連線發生錯誤。';
-                    console.error(err);
-                }
+                const script = document.createElement('script');
+                script.src = `${GAS_API_URL}?action=getFileData&fileId=${fileId}&callback=handleFileDataResponse`;
+                document.body.appendChild(script);
             }
         });
+
+        window.handleFileDataResponse = function(data) {
+            if (data.success) {
+                loadModelFromBase64(data.base64, data.name);
+            } else {
+                statusDiv.textContent = '下載失敗：' + data.error;
+            }
+        };
 
         uploadBtn.addEventListener('click', () => {
             const file = glbUpload.files[0];
@@ -286,30 +284,28 @@
             statusDiv.textContent = '檔案上傳中...';
             const reader = new FileReader();
             reader.readAsDataURL(file);
-            reader.onload = async function () {
+            reader.onload = function () {
                 const base64Data = reader.result.split(',')[1];
-                try {
-                    const res = await fetch(GAS_API_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({
-                            action: "uploadFile",
-                            base64Data: base64Data,
-                            fileName: file.name,
-                            mimeType: file.type
-                        })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        loadModelFromBase64(base64Data, file.name);
-                        fetchFiles();
-                    } else {
-                        statusDiv.textContent = '上傳失敗：' + data.error;
-                    }
-                } catch(err) {
-                    statusDiv.textContent = '上傳連線發生錯誤。';
+                
+                // 使用 fetch no-cors / follow mode 上傳
+                fetch(GAS_API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({
+                        action: "uploadFile",
+                        base64Data: base64Data,
+                        fileName: file.name,
+                        mimeType: file.type
+                    })
+                }).then(() => {
+                    statusDiv.textContent = '上傳完成！刷新清單中...';
+                    loadModelFromBase64(base64Data, file.name);
+                    setTimeout(fetchFilesJsonp, 2000);
+                }).catch(err => {
+                    statusDiv.textContent = '上傳連線失敗';
                     console.error(err);
-                }
+                });
             };
         });
     </script>
